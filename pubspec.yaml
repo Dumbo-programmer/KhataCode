@@ -1,0 +1,28 @@
+name: khatacode
+description: Photograph a symbolic program and render it as HTML.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.11.0+2
+  google_mlkit_text_recognition: ^0.15.0
+  flutter_inappwebview: ^6.1.5
+  image: ^4.5.4
+  permission_handler: ^12.0.1
+  camera_android: ^0.10.13
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/template.png
+    - assets/samples/

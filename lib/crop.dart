@@ -15,20 +15,7 @@ CropResult prepareHtmlCapture(Uint8List sourceBytes) {
   if (source == null) {
     throw StateError('The captured image could not be decoded.');
   }
-  final targetRatio = 210 / 297;
-  final sourceRatio = source.width / source.height;
-  var cropWidth = source.width;
-  var cropHeight = source.height;
-  if (sourceRatio > targetRatio) {
-    cropWidth = (source.height * targetRatio).round();
-  } else {
-    cropHeight = (source.width / targetRatio).round();
-  }
-  final cropped = img.copyCrop(source,
-      x: (source.width - cropWidth) ~/ 2,
-      y: (source.height - cropHeight) ~/ 2,
-      width: cropWidth,
-      height: cropHeight);
+  final cropped = centerCropToA4(source);
   final scale = 1600 / cropped.height;
   final resized = scale < 1
       ? img.copyResize(cropped,
@@ -52,7 +39,7 @@ CropResult prepareCapture(Uint8List sourceBytes) {
   if (source == null) {
     throw StateError('The captured image could not be decoded.');
   }
-  final scaled = canonicalizeImage(source);
+  final scaled = canonicalizeImage(centerCropToA4(source));
   var dark = 0;
   for (final pixel in scaled) {
     if (pixel.luminance < 100) dark++;
@@ -60,4 +47,32 @@ CropResult prepareCapture(Uint8List sourceBytes) {
   final blank = dark < scaled.width * scaled.height ~/ 200;
   return CropResult(Uint8List.fromList(img.encodePng(scaled)),
       cornersFound: false, blank: blank);
+}
+
+Uint8List prepareGeminiCapture(Uint8List sourceBytes) {
+  final source = img.decodeImage(sourceBytes);
+  if (source == null) {
+    throw StateError('The captured image could not be decoded.');
+  }
+  final cropped = centerCropToA4(source);
+  img.grayscale(cropped);
+  img.contrast(cropped, contrast: 130);
+  return Uint8List.fromList(img.encodeJpg(cropped, quality: 92));
+}
+
+img.Image centerCropToA4(img.Image source) {
+  const targetRatio = 210 / 297;
+  final sourceRatio = source.width / source.height;
+  var cropWidth = source.width;
+  var cropHeight = source.height;
+  if (sourceRatio > targetRatio) {
+    cropWidth = (source.height * targetRatio).round();
+  } else {
+    cropHeight = (source.width / targetRatio).round();
+  }
+  return img.copyCrop(source,
+      x: (source.width - cropWidth) ~/ 2,
+      y: (source.height - cropHeight) ~/ 2,
+      width: cropWidth,
+      height: cropHeight);
 }

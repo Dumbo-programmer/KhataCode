@@ -4,7 +4,20 @@ KhataCode photographs a hand-written symbolic program on an A4 sheet, recognizes
 
 ## Run
 
-Install Flutter, then run `flutter pub get`, `flutter analyze`, `flutter test`, and `flutter run -d <device>` on an Android phone. The camera permission must be granted.
+Install Flutter, then run `flutter pub get`, `flutter analyze`, and
+`flutter test`. The camera permission must be granted.
+
+Symbol scans use Gemini when a key is supplied at build/run time:
+
+```text
+flutter run -d <device> --dart-define=GEMINI_API_KEY=your-key
+```
+
+The key is compile-time configuration. A hot reload cannot add it; stop the
+app, run the command above, and reinstall/restart the app. Symbol scans fail
+clearly when the key is absent rather than silently using a different
+recognizer. Do not commit a Gemini key or place it directly in Dart source; a
+key embedded in a mobile app can be extracted from the application.
 
 ## Paper layout
 

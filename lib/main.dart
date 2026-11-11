@@ -126,8 +126,9 @@ class _CaptureScreenState extends State<CaptureScreen>
       controller = nextController;
       if (mounted) setState(() {});
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => permissionMessage = 'Could not start the camera: $e');
+      }
     } finally {
       starting = false;
     }
@@ -163,18 +164,20 @@ class _CaptureScreenState extends State<CaptureScreen>
     } catch (e) {
       error = '$e';
     }
-    if (mounted && error != null)
+    if (mounted && error != null) {
       Navigator.push(
           context,
           MaterialPageRoute(
               builder: (_) => ResultScreen(
                   result: PipelineResult(error: error!, mode: widget.mode),
                   thumbnail: null)));
-    if (mounted)
+    }
+    if (mounted) {
       setState(() {
         busy = false;
         busyPhoto = null;
       });
+    }
   }
 
   Future<PipelineResult> _process(XFile photo) async {
@@ -182,9 +185,10 @@ class _CaptureScreenState extends State<CaptureScreen>
       return _processHtml(photo);
     }
     final prepared = await compute(prepareCapture, await photo.readAsBytes());
-    if (prepared.blank)
+    if (prepared.blank) {
       throw const ProgramError(
           'Nothing detected, try again with the sheet flat and well lit.');
+    }
     final recognized =
         await recognizer!.processImage(InputImage.fromFilePath(photo.path));
     final grid = List.generate(17, (_) => List<String?>.filled(12, null));
@@ -260,7 +264,7 @@ class _CaptureScreenState extends State<CaptureScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (permissionMessage != null)
+    if (permissionMessage != null) {
       return Scaffold(
           appBar: AppBar(title: const Text('Camera')),
           body: Center(
@@ -277,8 +281,10 @@ class _CaptureScreenState extends State<CaptureScreen>
                             onPressed: openAppSettings,
                             child: const Text('Grant camera access')),
                       ]))));
-    if (controller == null || !controller!.value.isInitialized)
+    }
+    if (controller == null || !controller!.value.isInitialized) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(

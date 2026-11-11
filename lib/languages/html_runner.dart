@@ -13,10 +13,20 @@ class HtmlRunner implements LanguageRunner {
       throw const ProgramError(
           'Nothing detected, try again with the sheet flat and well lit.');
     }
-    final document = body.toLowerCase().contains('<html')
-        ? body
-        : '<html><head></head><body>$body</body></html>';
-    return document.replaceFirst('<head>',
-        '<head><style>body { font-size: 24px; padding: 16px; }</style>');
+    const style = '<style>body { font-size: 24px; padding: 16px; }</style>';
+    if (body.toLowerCase().contains('<html')) {
+      final head = RegExp(r'<head\s*>', caseSensitive: false);
+      final headMatch = head.firstMatch(body);
+      if (headMatch != null) {
+        return body.replaceRange(headMatch.end, headMatch.end, style);
+      }
+      final htmlMatch =
+          RegExp(r'<html\s*>', caseSensitive: false).firstMatch(body);
+      if (htmlMatch != null) {
+        return body.replaceRange(
+            htmlMatch.end, htmlMatch.end, '<head>$style</head>');
+      }
+    }
+    return '<html><head>$style</head><body>$body</body></html>';
   }
 }

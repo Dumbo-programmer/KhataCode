@@ -23,20 +23,22 @@ img.Image _sheet() {
   final image = img.Image(width: width, height: height);
   img.fill(image, color: img.ColorRgb8(255, 255, 255));
   final paint = img.ColorRgb8(210, 210, 210);
-  for (var r = 0; r <= 16; r++)
+  for (var r = 0; r <= 16; r++) {
     img.drawLine(image,
         x1: left,
         y1: top + r * cell,
         x2: left + 12 * cell,
         y2: top + r * cell,
         color: paint);
-  for (var c = 0; c <= 12; c++)
+  }
+  for (var c = 0; c <= 12; c++) {
     img.drawLine(image,
         x1: left + c * cell,
         y1: top,
         x2: left + c * cell,
         y2: top + 16 * cell,
         color: paint);
+  }
   for (final p in [
     [left, top],
     [left + 12 * cell, top],
@@ -81,12 +83,9 @@ img.Image _htmlSheet() {
       y2: height - 120,
       color: img.ColorRgb8(80, 80, 80),
       thickness: 4);
-  img.drawString(image,
-      'Write one tag or line per ruled line. Print letters large.',
-      font: img.arial24,
-      x: 220,
-      y: 250,
-      color: img.ColorRgb8(0, 0, 0));
+  img.drawString(
+      image, 'Write one tag or line per ruled line. Print letters large.',
+      font: img.arial24, x: 220, y: 250, color: img.ColorRgb8(0, 0, 0));
   return image;
 }
 

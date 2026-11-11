@@ -25,4 +25,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/template.png
+    - assets/html_template.png
     - assets/samples/

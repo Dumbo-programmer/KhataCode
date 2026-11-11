@@ -49,8 +49,9 @@ CropResult prepareHtmlCapture(Uint8List sourceBytes) {
 
 CropResult prepareCapture(Uint8List sourceBytes) {
   final source = img.decodeImage(sourceBytes);
-  if (source == null)
+  if (source == null) {
     throw StateError('The captured image could not be decoded.');
+  }
   final scaled = canonicalizeImage(source);
   var dark = 0;
   for (final pixel in scaled) {

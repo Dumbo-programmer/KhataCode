@@ -11,12 +11,11 @@ String cleanHtmlLine(String line) {
       .replaceAll('»', '>')
       .replaceAll('〉', '>');
 
-  cleaned = cleaned.replaceAllMapped(
-      RegExp(r'<\s*/\s*([^<>]*?)\s*>'), (match) {
+  cleaned = cleaned.replaceAllMapped(RegExp(r'<\s*/\s*([^<>]*?)\s*>'), (match) {
     return '</${match.group(1)!.trim()}>';
   });
-  cleaned = cleaned.replaceAllMapped(
-      RegExp(r'<(?!/)\s*([^<>]*?)\s*>'), (match) {
+  cleaned =
+      cleaned.replaceAllMapped(RegExp(r'<(?!/)\s*([^<>]*?)\s*>'), (match) {
     return '<${match.group(1)!.trim()}>';
   });
   cleaned = cleaned.replaceAllMapped(

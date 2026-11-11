@@ -26,22 +26,25 @@ class SymbolRunner implements LanguageRunner {
     vars.addAll({'a': 0, 'b': 0, 'c': 0});
     vars.addAll(initialVars);
     final program = cells.where((c) => c.type != TokenType.blank).toList();
-    if (program.isEmpty)
+    if (program.isEmpty) {
       throw const ProgramError(
           'Nothing detected, try again with the sheet flat and well lit.');
+    }
     final openRows = <int>[];
     for (final cell in program) {
       if (cell.type == TokenType.blockOpen) openRows.add(cell.row + 1);
       if (cell.type == TokenType.blockClose) {
-        if (openRows.isEmpty)
+        if (openRows.isEmpty) {
           throw ProgramError('Stray closing brace at row ${cell.row + 1}',
               row: cell.row + 1);
+        }
         openRows.removeLast();
       }
     }
-    if (openRows.isNotEmpty)
+    if (openRows.isNotEmpty) {
       throw ProgramError('Unclosed block at row ${openRows.last}',
           row: openRows.last);
+    }
     _execute(program, 0, program.length);
     final text = output.map((line) => '<div>${_escape(line)}</div>').join();
     final points = path.join(' ');
@@ -72,8 +75,9 @@ class SymbolRunner implements LanguageRunner {
   void _execute(List<Cell> cells, int from, int to) {
     var i = from;
     while (i < to) {
-      if (++statements > 5000)
+      if (++statements > 5000) {
         throw const ProgramError('Program ran too long (loop limit).');
+      }
       final c = cells[i];
       switch (c.type) {
         case TokenType.moveRight:
@@ -85,19 +89,20 @@ class SymbolRunner implements LanguageRunner {
           i++;
           break;
         case TokenType.moveUp:
-          path.add('${_lastX},${_lastY - 20}');
+          path.add('$_lastX,${_lastY - 20}');
           i++;
           break;
         case TokenType.moveDown:
-          path.add('${_lastX},${_lastY + 20}');
+          path.add('$_lastX,${_lastY + 20}');
           i++;
           break;
         case TokenType.print:
           if (i + 1 >= to ||
               !{TokenType.digit, TokenType.variable}
-                  .contains(cells[i + 1].type))
+                  .contains(cells[i + 1].type)) {
             throw ProgramError('Expected a number after P at row ${c.row + 1}',
                 row: c.row + 1);
+          }
           output.add('${_value(cells[i + 1])}');
           i += 2;
           break;
@@ -105,10 +110,11 @@ class SymbolRunner implements LanguageRunner {
           if (i + 2 >= to ||
               cells[i + 1].type != TokenType.variable ||
               !{TokenType.digit, TokenType.variable}
-                  .contains(cells[i + 2].type))
+                  .contains(cells[i + 2].type)) {
             throw ProgramError(
                 'Expected a variable and number after = at row ${c.row + 1}',
                 row: c.row + 1);
+          }
           vars[cells[i + 1].varName!] = _value(cells[i + 2]);
           i += 3;
           break;
@@ -116,15 +122,18 @@ class SymbolRunner implements LanguageRunner {
         case TokenType.ifThen:
           if (i + 1 >= to ||
               !{TokenType.digit, TokenType.variable}
-                  .contains(cells[i + 1].type))
+                  .contains(cells[i + 1].type)) {
             throw ProgramError(
                 'Expected a number after ${c.type == TokenType.repeat ? 'R' : 'I'} at row ${c.row + 1}',
                 row: c.row + 1);
+          }
           final end = _findOpen(cells, i + 2);
           final count = c.type == TokenType.repeat
               ? _value(cells[i + 1])
               : (_value(cells[i + 1]) == 0 ? 0 : 1);
-          for (var n = 0; n < count; n++) _execute(cells, i + 3, end);
+          for (var n = 0; n < count; n++) {
+            _execute(cells, i + 3, end);
+          }
           i = end + 1;
           break;
         case TokenType.blockClose:

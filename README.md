@@ -35,6 +35,18 @@ Handwriting recognition of `<`, `>`, `/`, `=`, and quotes is the weak point.
 The editable **Recognized HTML** box on the result screen is the fallback:
 correct the text and press **Run again** without taking another photograph.
 
+## Hero screen, theme, and About
+
+The app opens with a short, skippable hero animation. It respects Android's
+reduced-motion setting and shows only once per app run. The Home tab contains
+the HTML and symbol scan actions; the About tab contains the description,
+developers, version, copyright, and appearance controls.
+
+The default theme is dark. Use the sun/moon button for a quick light/dark
+toggle, or choose System, Light, or Dark in About. Theme choice is kept in
+memory only and is not persisted. Shared app strings live in
+`lib/app_info.dart`.
+
 ## Decisions
 
 - The Android-only project uses `setState` and `Navigator` with no state-management or routing package.
@@ -45,6 +57,10 @@ correct the text and press **Run again** without taking another photograph.
   center A4 crop and image preprocessing rather than registration marks or a grid.
 - HTML lines are kept as text cells so the existing symbol tokenizer remains
   unchanged; the HTML runner accepts unclosed or mismatched tags like a browser.
+- The hero animation uses one Flutter `AnimationController`, skips on tap or
+  reduced motion, and does not initialize camera or OCR work.
+- Theme selection is intentionally in-memory only; restarting the app returns
+  to the dark default.
 
 ## Samples
 

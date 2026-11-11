@@ -7,6 +7,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'app_info.dart';
+import 'gemini_recognizer.dart';
 import 'languages/symbol_runner.dart';
 import 'languages/html_runner.dart';
 import 'crop.dart';
@@ -32,24 +33,160 @@ class _KhataCodeAppState extends State<KhataCodeApp> {
       brightness: brightness, useMaterial3: true, colorSchemeSeed: Colors.teal);
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  State<KhataCodeApp> createState() => _KhataCodeAppState();
+}
+
+class _KhataCodeAppState extends State<KhataCodeApp>
+    with SingleTickerProviderStateMixin {
+  static bool introShown = false;
+  ThemeMode themeMode = ThemeMode.dark;
+  late final AnimationController introController;
+  bool introDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    introDone = introShown;
+    introController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2000));
+    if (!introDone) {
+      introController.addStatusListener((status) {
+        if (status == AnimationStatus.completed && mounted) {
+          setState(() {
+            introDone = true;
+            introShown = true;
+          });
+        }
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !MediaQuery.of(context).disableAnimations) {
+          introController.forward();
+        } else if (mounted) {
+          setState(() {
+            introDone = true;
+            introShown = true;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    introController.dispose();
+    super.dispose();
+  }
+
+  void skipIntro() {
+    if (!introDone) {
+      setState(() {
+        introDone = true;
+        introShown = true;
+      });
+    }
+  }
+
+  ThemeData _theme(Brightness brightness) => ThemeData(
+      brightness: brightness, useMaterial3: true, colorSchemeSeed: Colors.teal);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
       title: appName,
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
       themeMode: themeMode,
-      home: HomeShell(
-          themeMode: themeMode,
-          onThemeModeChanged: (mode) => setState(() => themeMode = mode)));
+      home: GestureDetector(
+        onTap: skipIntro,
+        child: AnimatedBuilder(
+          animation: introController,
+          builder: (context, child) => Stack(
+            fit: StackFit.expand,
+            children: [
+              HomeShell(
+                themeMode: themeMode,
+                onThemeModeChanged: (mode) => setState(() => themeMode = mode),
+                entranceProgress: introDone ? 1 : introController.value,
+              ),
+              if (!introDone) IntroView(progress: introController.value),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class IntroView extends StatelessWidget {
+  final double progress;
+  const IntroView({super.key, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final glyph = CurvedAnimation(
+        parent: AlwaysStoppedAnimation(progress), curve: Curves.easeOut);
+    final titleProgress =
+        Interval(0.3, 0.65, curve: Curves.easeOut).transform(progress);
+    final taglineProgress =
+        Interval(0.65, 0.9, curve: Curves.easeOut).transform(progress);
+    final fadeOut =
+        1 - Interval(0.9, 1, curve: Curves.easeIn).transform(progress);
+    final title = appName.substring(
+        0, (appName.length * titleProgress).round().clamp(0, appName.length));
+    return IgnorePointer(
+      child: Opacity(
+        opacity: fadeOut,
+        child: ColoredBox(
+          color: const Color(0xff071313),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Opacity(
+                  opacity: glyph.value,
+                  child: Transform.scale(
+                    scale: 0.75 + glyph.value * 0.25,
+                    child: const Text('</>',
+                        style: TextStyle(
+                            color: Colors.tealAccent,
+                            fontSize: 64,
+                            fontWeight: FontWeight.bold,
+                            shadows: [
+                              Shadow(color: Colors.tealAccent, blurRadius: 18)
+                            ])),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(title,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 38,
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Opacity(
+                  opacity: taglineProgress,
+                  child: const Text(appTagline,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, fontSize: 16)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class HomeShell extends StatefulWidget {
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+  final double entranceProgress;
   const HomeShell(
       {super.key,
       required this.themeMode,
-      required this.onThemeModeChanged});
-
+      required this.onThemeModeChanged,
+      required this.entranceProgress});
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
@@ -58,38 +195,41 @@ class _HomeShellState extends State<HomeShell> {
   int index = 0;
   bool howItWorks = false;
 
-  void _openCapture(ScanMode mode) {
+  void openCapture(ScanMode mode) {
     Navigator.push(
         context, MaterialPageRoute(builder: (_) => CaptureScreen(mode: mode)));
+  }
+
+  void toggleQuickTheme() {
+    widget.onThemeModeChanged(
+        widget.themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(index == 0 ? appName : 'About'),
-        actions: index == 0
-            ? [
+      appBar: index == 0
+          ? AppBar(
+              title: const Text(appName),
+              actions: [
                 IconButton(
                     tooltip: 'Toggle light and dark mode',
-                    icon: Icon(widget.themeMode == ThemeMode.dark
-                        ? Icons.light_mode
-                        : Icons.dark_mode),
-                    onPressed: () => widget.onThemeModeChanged(
-                        widget.themeMode == ThemeMode.light
-                            ? ThemeMode.dark
-                            : ThemeMode.light))
-              ]
-            : null,
-      ),
+                    icon: Icon(widget.themeMode == ThemeMode.light
+                        ? Icons.dark_mode
+                        : Icons.light_mode),
+                    onPressed: toggleQuickTheme)
+              ],
+            )
+          : AppBar(title: const Text('About')),
       body: IndexedStack(
         index: index,
         children: [
           HeroHome(
+              entranceProgress: widget.entranceProgress,
               howItWorks: howItWorks,
               onHowItWorksChanged: (value) =>
                   setState(() => howItWorks = value),
-              onScan: _openCapture),
+              onScan: openCapture),
           AboutTab(
               themeMode: widget.themeMode,
               onThemeModeChanged: widget.onThemeModeChanged),
@@ -108,74 +248,88 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 class HeroHome extends StatelessWidget {
+  final double entranceProgress;
   final bool howItWorks;
   final ValueChanged<bool> onHowItWorksChanged;
   final ValueChanged<ScanMode> onScan;
   const HeroHome(
       {super.key,
+      required this.entranceProgress,
       required this.howItWorks,
       required this.onHowItWorksChanged,
       required this.onScan});
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
+  Widget build(BuildContext context) {
+    final slide = Curves.easeOut.transform(entranceProgress);
+    return CustomPaint(
+      painter: _RulePainter(color: Theme.of(context).colorScheme.outline),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
-            child: Column(
-              children: [
-                const Text('</>',
-                    style: TextStyle(
-                        fontSize: 64,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal)),
-                const Text(appName,
-                    style:
-                        TextStyle(fontSize: 42, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                const Text(appTagline,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 19)),
-                const SizedBox(height: 14),
-                const Text(appDescription,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16)),
-                const SizedBox(height: 30),
-                _ScanButton(
-                    label: 'Scan HTML',
-                    helper: 'Write tags on ruled paper',
-                    onPressed: () => onScan(ScanMode.html)),
-                const SizedBox(height: 16),
-                _ScanButton(
-                    label: 'Scan symbol sheet',
-                    helper: 'Use the printed grid sheet',
-                    outlined: true,
-                    onPressed: () => onScan(ScanMode.symbols)),
-                const SizedBox(height: 10),
-                TextButton(
-                    onPressed: () => onHowItWorksChanged(!howItWorks),
-                    child: const Text('How it works'),
-                ),
-                if (howItWorks)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('1. Write on paper.'),
-                          Text('2. Take a photo.'),
-                          Text('3. See it run.'),
-                        ],
-                      ),
+            child: Opacity(
+              opacity: slide,
+              child: Transform.translate(
+                offset: Offset(0, 24 * (1 - slide)),
+                child: Column(
+                  children: [
+                    const Text('</>',
+                        style: TextStyle(
+                            fontSize: 64,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal)),
+                    const Text(appName,
+                        style: TextStyle(
+                            fontSize: 42, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text(appTagline,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 19)),
+                    const SizedBox(height: 14),
+                    const Text(appDescription,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16)),
+                    const SizedBox(height: 30),
+                    _ScanButton(
+                        label: 'Scan HTML',
+                        helper: 'Write tags on ruled paper',
+                        onPressed: () => onScan(ScanMode.html)),
+                    const SizedBox(height: 16),
+                    _ScanButton(
+                        label: 'Scan symbol sheet',
+                        helper: 'Use the printed grid sheet',
+                        outlined: true,
+                        onPressed: () => onScan(ScanMode.symbols)),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: () => onHowItWorksChanged(!howItWorks),
+                      child: const Text('How it works'),
                     ),
-                  ),
-              ],
+                    if (howItWorks)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('1. Write on paper.'),
+                              Text('2. Take a photo.'),
+                              Text('3. See it run.'),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _ScanButton extends StatelessWidget {
@@ -216,91 +370,93 @@ class AboutTab extends StatelessWidget {
       name.split(' ').map((part) => part[0]).take(2).join();
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Column(
-              children: [
-                const Text('</>',
-                    style: TextStyle(
-                        fontSize: 52,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal)),
-                const Text(appName,
-                    style:
-                        TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                const Text('Version $appVersion'),
-                const SizedBox(height: 28),
-                const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('About',
-                        style: TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold))),
-                const SizedBox(height: 8),
-                const Text(appDescription),
-                const SizedBox(height: 20),
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            children: [
+              const Text('</>',
+                  style: TextStyle(
+                      fontSize: 52,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal)),
+              const Text(appName,
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              const Text('Version $appVersion'),
+              const SizedBox(height: 28),
+              const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('About',
+                      style: TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.bold))),
+              const SizedBox(height: 8),
+              const Text(appDescription),
+              const SizedBox(height: 28),
+              const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Developers',
+                      style: TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.bold))),
+              for (final developer in developers)
                 Card(
                   child: ListTile(
-                    leading: Icon(
-                        GeminiSymbolReader().isConfigured
-                            ? Icons.cloud_done
-                            : Icons.cloud_off,
-                        color: GeminiSymbolReader().isConfigured
-                            ? Colors.green
-                            : Colors.orange),
-                    title: const Text('Gemini symbol recognition'),
-                    subtitle: Text(GeminiSymbolReader().isConfigured
-                        ? 'Configured for this build'
-                        : 'Not configured; rebuild with GEMINI_API_KEY'),
+                    leading: CircleAvatar(child: Text(initials(developer))),
+                    title:
+                        Text(developer, style: const TextStyle(fontSize: 18)),
+                    subtitle: const Text('Developer'),
                   ),
                 ),
-                const SizedBox(height: 28),
-                const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Developers',
-                        style: TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold))),
-                for (final developer in developers)
-                  Card(
-                    child: ListTile(
-                      leading: CircleAvatar(child: Text(initials(developer))),
-                      title: Text(developer,
-                          style: const TextStyle(fontSize: 18)),
-                      subtitle: const Text('Developer'),
-                    ),
-                  ),
-                const SizedBox(height: 20),
-                const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Appearance',
-                        style: TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold))),
-                const SizedBox(height: 8),
-                SegmentedButton<ThemeMode>(
-                  segments: const [
-                    ButtonSegment(
-                        value: ThemeMode.system, label: Text('System')),
-                    ButtonSegment(
-                        value: ThemeMode.light, label: Text('Light')),
-                    ButtonSegment(
-                        value: ThemeMode.dark, label: Text('Dark')),
-                  ],
-                  selected: {themeMode},
-                  onSelectionChanged: (selection) =>
-                      onThemeModeChanged(selection.first),
-                ),
-                const SizedBox(height: 34),
-                const Text(appCopyright,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey)),
-              ],
-            ),
+              const SizedBox(height: 20),
+              const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Appearance',
+                      style: TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.bold))),
+              const SizedBox(height: 8),
+              SegmentedButton<ThemeMode>(
+                segments: const [
+                  ButtonSegment(value: ThemeMode.system, label: Text('System')),
+                  ButtonSegment(value: ThemeMode.light, label: Text('Light')),
+                  ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+                ],
+                selected: {themeMode},
+                onSelectionChanged: (selection) =>
+                    onThemeModeChanged(selection.first),
+              ),
+              const SizedBox(height: 34),
+              const Text(appCopyright,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey)),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
+}
+
+class _RulePainter extends CustomPainter {
+  final Color color;
+  const _RulePainter({required this.color});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withValues(alpha: .12)
+      ..strokeWidth = 1;
+    for (var y = 28.0; y < size.height; y += 28) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+    for (var x = 20.0; x < size.width; x += 28) {
+      canvas.drawCircle(Offset(x, 20), 1.2, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RulePainter oldDelegate) => oldDelegate.color != color;
 }
 
 class CaptureScreen extends StatefulWidget {
@@ -318,6 +474,7 @@ class _CaptureScreenState extends State<CaptureScreen>
   String? busyPhoto;
   String? permissionMessage;
   TextRecognizer? recognizer;
+
   @override
   void initState() {
     super.initState();
@@ -348,7 +505,7 @@ class _CaptureScreenState extends State<CaptureScreen>
         return;
       }
       controller = nextController;
-      if (mounted) setState(() {});
+      setState(() {});
     } catch (e) {
       if (mounted) {
         setState(() => permissionMessage = 'Could not start the camera: $e');
@@ -405,9 +562,7 @@ class _CaptureScreenState extends State<CaptureScreen>
   }
 
   Future<PipelineResult> _process(XFile photo) async {
-    if (widget.mode == ScanMode.html) {
-      return _processHtml(photo);
-    }
+    if (widget.mode == ScanMode.html) return _processHtml(photo);
     final prepared = await compute(prepareCapture, await photo.readAsBytes());
     if (prepared.blank) {
       throw const ProgramError(
@@ -423,8 +578,10 @@ class _CaptureScreenState extends State<CaptureScreen>
         await compute(prepareGeminiCapture, await photo.readAsBytes());
     final grid = await geminiReader.read(geminiBytes);
     final program = tokenize(grid);
-    final html = SymbolRunner(program.vars).build(program.cells);
-    return PipelineResult(html: html, mode: ScanMode.symbols, tokens: grid);
+    return PipelineResult(
+        html: SymbolRunner(program.vars).build(program.cells),
+        mode: ScanMode.symbols,
+        tokens: grid);
   }
 
   Future<PipelineResult> _processHtml(XFile photo) async {
@@ -437,35 +594,59 @@ class _CaptureScreenState extends State<CaptureScreen>
     final processedPath = '${photo.path}.html.png';
     await File(processedPath).writeAsBytes(prepared.bytes);
     try {
-      final recognized = await recognizer!
-          .processImage(InputImage.fromFilePath(processedPath));
-      final lines = recognized.blocks.expand((block) => block.lines).toList();
-      lines.sort((a, b) {
-        final verticalDifference =
-            a.boundingBox.center.dy - b.boundingBox.center.dy;
-        final lineHeight = (a.boundingBox.height + b.boundingBox.height) / 2;
-        if (verticalDifference.abs() <= lineHeight / 2) {
-          return a.boundingBox.left.compareTo(b.boundingBox.left);
+      if (!hasGeminiKey()) {
+        return await _processHtmlWithMlKit(processedPath);
+      }
+      try {
+        final reply = await transcribeHtml(prepared.bytes);
+        if (reply.isEmpty) {
+          throw const ProgramError(
+              'Nothing detected, try again with the sheet flat and well lit.');
         }
-        return verticalDifference < 0 ? -1 : 1;
-      });
-      final rawLines = lines.map((line) => line.text).toList();
-      final cleanedLines = rawLines.map(cleanHtmlLine).toList();
-      final cells = [
-        for (var row = 0; row < cleanedLines.length; row++)
-          Cell(row: row, col: 0, type: TokenType.text, raw: cleanedLines[row])
-      ];
-      final bodyText = cleanedLines.join('\n').trim();
-      final html = HtmlRunner().build(cells);
-      return PipelineResult(
-          html: html,
-          mode: ScanMode.html,
-          bodyText: bodyText,
-          rawLines: rawLines,
-          cleanedLines: cleanedLines);
+        return _htmlResultFromLines(reply.split('\n'),
+            recognizedBy: 'Gemini', rawReply: reply);
+      } on GeminiException catch (error) {
+        final fallback = await _processHtmlWithMlKit(processedPath);
+        return fallback.copyWith(
+            warning: 'Online recognition failed (${error.message})');
+      }
     } finally {
       await File(processedPath).delete();
     }
+  }
+
+  Future<PipelineResult> _processHtmlWithMlKit(String path) async {
+    final recognized =
+        await recognizer!.processImage(InputImage.fromFilePath(path));
+    final lines = recognized.blocks.expand((block) => block.lines).toList();
+    lines.sort((a, b) {
+      final difference = a.boundingBox.center.dy - b.boundingBox.center.dy;
+      final height = (a.boundingBox.height + b.boundingBox.height) / 2;
+      if (difference.abs() <= height / 2) {
+        return a.boundingBox.left.compareTo(b.boundingBox.left);
+      }
+      return difference < 0 ? -1 : 1;
+    });
+    return _htmlResultFromLines(lines.map((line) => line.text).toList(),
+        recognizedBy: 'ML Kit (offline)');
+  }
+
+  PipelineResult _htmlResultFromLines(List<String> rawLines,
+      {required String recognizedBy, String? rawReply, String? warning}) {
+    final cleanedLines = rawLines.map(cleanHtmlLine).toList();
+    final cells = [
+      for (var row = 0; row < cleanedLines.length; row++)
+        Cell(row: row, col: 0, type: TokenType.text, raw: cleanedLines[row])
+    ];
+    return PipelineResult(
+        html: HtmlRunner().build(cells),
+        mode: ScanMode.html,
+        bodyText: cleanedLines.join('\n').trim(),
+        rawLines: rawLines,
+        cleanedLines: cleanedLines,
+        recognizedBy: recognizedBy,
+        rawReply: rawReply,
+        warning: warning);
   }
 
   @override
@@ -553,6 +734,9 @@ class PipelineResult {
   final List<String> rawLines;
   final List<String> cleanedLines;
   final List<List<String?>> tokens;
+  final String? recognizedBy;
+  final String? rawReply;
+  final String? warning;
   PipelineResult(
       {this.html,
       this.error,
@@ -561,7 +745,23 @@ class PipelineResult {
       this.bodyText,
       this.rawLines = const [],
       this.cleanedLines = const [],
-      this.tokens = const []});
+      this.tokens = const [],
+      this.recognizedBy,
+      this.rawReply,
+      this.warning});
+
+  PipelineResult copyWith({String? warning}) => PipelineResult(
+      html: html,
+      error: error,
+      thumbnail: thumbnail,
+      mode: mode,
+      bodyText: bodyText,
+      rawLines: rawLines,
+      cleanedLines: cleanedLines,
+      tokens: tokens,
+      recognizedBy: recognizedBy,
+      rawReply: rawReply,
+      warning: warning);
 }
 
 class ResultScreen extends StatefulWidget {
@@ -589,9 +789,8 @@ class _ResultScreenState extends State<ResultScreen> {
         for (var row = 0; row < lines.length; row++)
           Cell(row: row, col: 0, type: TokenType.text, raw: lines[row])
       ];
-      final html = HtmlRunner().build(cells);
       setState(() {
-        widget.result.html = html;
+        widget.result.html = HtmlRunner().build(cells);
         webviewError = null;
       });
     } on ProgramError catch (error) {
@@ -611,80 +810,89 @@ class _ResultScreenState extends State<ResultScreen> {
     final output = error != null
         ? SingleChildScrollView(
             child: Text(
-              webviewError == null
-                  ? error
-                  : '$error\n\nRaw HTML:\n${widget.result.html}',
-              style: const TextStyle(fontSize: 20),
-            ),
-          )
-        : InAppWebView(
-            key: ValueKey(widget.result.html),
-            initialData: InAppWebViewInitialData(
-                data: widget.result.html ?? '<html><body></body></html>'),
-            initialSettings: InAppWebViewSettings(javaScriptEnabled: false),
-            onReceivedError: (controller, request, loadError) {
-              setState(() => webviewError = loadError.description);
-            },
-          );
+                webviewError == null
+                    ? error
+                    : '$error\n\nRaw HTML:\n${widget.result.html}',
+                style: const TextStyle(fontSize: 20)))
+        : Container(
+            decoration: BoxDecoration(
+                color: Colors.white,
+                border:
+                    Border.all(color: Theme.of(context).colorScheme.outline)),
+            child: InAppWebView(
+                key: ValueKey(widget.result.html),
+                initialData: InAppWebViewInitialData(
+                    data: widget.result.html ?? '<html><body></body></html>'),
+                initialSettings: InAppWebViewSettings(javaScriptEnabled: false),
+                onReceivedError: (controller, request, loadError) {
+                  setState(() => webviewError = loadError.description);
+                }));
     return Scaffold(
       appBar: AppBar(title: const Text('Result')),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Expanded(flex: 3, child: output),
-            if (widget.result.mode == ScanMode.html) ...[
-              const SizedBox(height: 8),
-              const Text(
-                  'OCR can confuse <, >, /, =, and quotes. Edit the HTML below if needed.',
-                  style: TextStyle(color: Colors.deepOrange)),
-              const SizedBox(height: 8),
-              TextField(
+        child: Column(children: [
+          if (widget.result.warning != null)
+            Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: Text(
+                    '${widget.result.warning}. Used offline recognition instead.')),
+          if (widget.result.recognizedBy != null)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Recognized by: ${widget.result.recognizedBy}',
+                    style: Theme.of(context).textTheme.labelLarge)),
+          Expanded(flex: 3, child: output),
+          if (widget.result.mode == ScanMode.html) ...[
+            const SizedBox(height: 8),
+            const Text(
+                'OCR can confuse <, >, /, =, and quotes. Edit the HTML below if needed.',
+                style: TextStyle(color: Colors.deepOrange)),
+            const SizedBox(height: 8),
+            TextField(
                 controller: htmlController,
                 minLines: 3,
                 maxLines: 6,
                 style: const TextStyle(fontFamily: 'monospace'),
                 decoration: const InputDecoration(
-                    labelText: 'Recognized HTML', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
+                    labelText: 'Recognized HTML',
+                    border: OutlineInputBorder())),
+            const SizedBox(height: 8),
+            SizedBox(
                 width: double.infinity,
                 height: 52,
                 child: FilledButton(
-                    onPressed: _runEditedHtml, child: const Text('Run again')),
-              ),
-            ],
-            ExpansionTile(
-              title: const Text('Debug'),
-              children: [
-                if (widget.result.mode == ScanMode.html)
-                  for (var row = 0; row < widget.result.rawLines.length; row++)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                          '${row + 1}: ${widget.result.rawLines[row]}  ->  ${widget.result.cleanedLines[row]}'),
-                    )
-                else
-                  for (var row = 0; row < widget.result.tokens.length; row++)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                          '${row + 1}: ${widget.result.tokens[row].map((e) => e ?? '_').join()}'),
-                    ),
-              ],
-            ),
-            SizedBox(
+                    onPressed: _runEditedHtml, child: const Text('Run again'))),
+          ],
+          ExpansionTile(title: const Text('Debug'), children: [
+            if (widget.result.recognizedBy != null)
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                      'Engine: ${widget.result.recognizedBy}\nRaw reply: ${widget.result.rawReply ?? '(ML Kit line results)'}')),
+            if (widget.result.mode == ScanMode.html)
+              for (var row = 0; row < widget.result.rawLines.length; row++)
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                        '${row + 1}: ${widget.result.rawLines[row]}  ->  ${widget.result.cleanedLines[row]}'))
+            else
+              for (var row = 0; row < widget.result.tokens.length; row++)
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                        '${row + 1}: ${widget.result.tokens[row].map((e) => e ?? '_').join()}')),
+          ]),
+          SizedBox(
               width: double.infinity,
               height: 52,
               child: FilledButton(
-                onPressed: () =>
-                    Navigator.popUntil(context, (route) => route.isFirst),
-                child: const Text('Scan again'),
-              ),
-            ),
-          ],
-        ),
+                  onPressed: () =>
+                      Navigator.popUntil(context, (route) => route.isFirst),
+                  child: const Text('Scan again'))),
+        ]),
       ),
     );
   }

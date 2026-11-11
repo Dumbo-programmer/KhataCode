@@ -7,6 +7,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'app_info.dart';
+import 'gemini_recognizer.dart';
 import 'languages/symbol_runner.dart';
 import 'languages/html_runner.dart';
 import 'crop.dart';
@@ -592,32 +593,59 @@ class _CaptureScreenState extends State<CaptureScreen>
     final processedPath = '${photo.path}.html.png';
     await File(processedPath).writeAsBytes(prepared.bytes);
     try {
-      final recognized = await recognizer!
-          .processImage(InputImage.fromFilePath(processedPath));
-      final lines = recognized.blocks.expand((block) => block.lines).toList();
-      lines.sort((a, b) {
-        final difference = a.boundingBox.center.dy - b.boundingBox.center.dy;
-        final height = (a.boundingBox.height + b.boundingBox.height) / 2;
-        if (difference.abs() <= height / 2) {
-          return a.boundingBox.left.compareTo(b.boundingBox.left);
+      if (!hasGeminiKey()) {
+        return await _processHtmlWithMlKit(processedPath);
+      }
+      try {
+        final reply = await transcribeHtml(prepared.bytes);
+        if (reply.isEmpty) {
+          throw const ProgramError(
+              'Nothing detected, try again with the sheet flat and well lit.');
         }
-        return difference < 0 ? -1 : 1;
-      });
-      final rawLines = lines.map((line) => line.text).toList();
-      final cleanedLines = rawLines.map(cleanHtmlLine).toList();
-      final cells = [
-        for (var row = 0; row < cleanedLines.length; row++)
-          Cell(row: row, col: 0, type: TokenType.text, raw: cleanedLines[row])
-      ];
-      return PipelineResult(
-          html: HtmlRunner().build(cells),
-          mode: ScanMode.html,
-          bodyText: cleanedLines.join('\n').trim(),
-          rawLines: rawLines,
-          cleanedLines: cleanedLines);
+        return _htmlResultFromLines(reply.split('\n'),
+            recognizedBy: 'Gemini', rawReply: reply);
+      } on GeminiException catch (error) {
+        final fallback = await _processHtmlWithMlKit(processedPath);
+        return fallback.copyWith(
+            warning: 'Online recognition failed (${error.message})');
+      }
     } finally {
       await File(processedPath).delete();
     }
+  }
+
+  Future<PipelineResult> _processHtmlWithMlKit(String path) async {
+    final recognized =
+        await recognizer!.processImage(InputImage.fromFilePath(path));
+    final lines = recognized.blocks.expand((block) => block.lines).toList();
+    lines.sort((a, b) {
+      final difference = a.boundingBox.center.dy - b.boundingBox.center.dy;
+      final height = (a.boundingBox.height + b.boundingBox.height) / 2;
+      if (difference.abs() <= height / 2) {
+        return a.boundingBox.left.compareTo(b.boundingBox.left);
+      }
+      return difference < 0 ? -1 : 1;
+    });
+    return _htmlResultFromLines(lines.map((line) => line.text).toList(),
+        recognizedBy: 'ML Kit (offline)');
+  }
+
+  PipelineResult _htmlResultFromLines(List<String> rawLines,
+      {required String recognizedBy, String? rawReply, String? warning}) {
+    final cleanedLines = rawLines.map(cleanHtmlLine).toList();
+    final cells = [
+      for (var row = 0; row < cleanedLines.length; row++)
+        Cell(row: row, col: 0, type: TokenType.text, raw: cleanedLines[row])
+    ];
+    return PipelineResult(
+        html: HtmlRunner().build(cells),
+        mode: ScanMode.html,
+        bodyText: cleanedLines.join('\n').trim(),
+        rawLines: rawLines,
+        cleanedLines: cleanedLines,
+        recognizedBy: recognizedBy,
+        rawReply: rawReply,
+        warning: warning);
   }
 
   @override
@@ -705,6 +733,9 @@ class PipelineResult {
   final List<String> rawLines;
   final List<String> cleanedLines;
   final List<List<String?>> tokens;
+  final String? recognizedBy;
+  final String? rawReply;
+  final String? warning;
   PipelineResult(
       {this.html,
       this.error,
@@ -713,7 +744,23 @@ class PipelineResult {
       this.bodyText,
       this.rawLines = const [],
       this.cleanedLines = const [],
-      this.tokens = const []});
+      this.tokens = const [],
+      this.recognizedBy,
+      this.rawReply,
+      this.warning});
+
+  PipelineResult copyWith({String? warning}) => PipelineResult(
+      html: html,
+      error: error,
+      thumbnail: thumbnail,
+      mode: mode,
+      bodyText: bodyText,
+      rawLines: rawLines,
+      cleanedLines: cleanedLines,
+      tokens: tokens,
+      recognizedBy: recognizedBy,
+      rawReply: rawReply,
+      warning: warning);
 }
 
 class ResultScreen extends StatefulWidget {
@@ -784,6 +831,18 @@ class _ResultScreenState extends State<ResultScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
+          if (widget.result.warning != null)
+            Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: Text(
+                    '${widget.result.warning}. Used offline recognition instead.')),
+          if (widget.result.recognizedBy != null)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Recognized by: ${widget.result.recognizedBy}',
+                    style: Theme.of(context).textTheme.labelLarge)),
           Expanded(flex: 3, child: output),
           if (widget.result.mode == ScanMode.html) ...[
             const SizedBox(height: 8),
@@ -807,6 +866,11 @@ class _ResultScreenState extends State<ResultScreen> {
                     onPressed: _runEditedHtml, child: const Text('Run again'))),
           ],
           ExpansionTile(title: const Text('Debug'), children: [
+            if (widget.result.recognizedBy != null)
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                      'Engine: ${widget.result.recognizedBy}\nRaw reply: ${widget.result.rawReply ?? '(ML Kit line results)'}')),
             if (widget.result.mode == ScanMode.html)
               for (var row = 0; row < widget.result.rawLines.length; row++)
                 Align(

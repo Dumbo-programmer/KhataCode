@@ -35,6 +35,14 @@ Handwriting recognition of `<`, `>`, `/`, `=`, and quotes is the weak point.
 The editable **Recognized HTML** box on the result screen is the fallback:
 correct the text and press **Run again** without taking another photograph.
 
+HTML mode can optionally use Gemini first. Copy `lib/secrets.example.dart` to
+`lib/secrets.dart`, create a key at [Google AI Studio](https://aistudio.google.com),
+and set the current Flash model name. With the placeholder values, or without
+internet access, the app uses ML Kit offline. Gemini free-tier requests send
+the cropped image to Google's service and are subject to its quotas and data
+handling terms. The key is embedded in the APK, so this setup is for demos,
+not production distribution.
+
 ## Hero screen, theme, and About
 
 The app opens with a short, skippable hero animation. It respects Android's
@@ -61,6 +69,8 @@ memory only and is not persisted. Shared app strings live in
   reduced motion, and does not initialize camera or OCR work.
 - Theme selection is intentionally in-memory only; restarting the app returns
   to the dark default.
+- Gemini is an explicit demo-time HTML recognizer; ML Kit remains the offline
+  fallback and symbol mode remains entirely on-device.
 
 ## Samples
 
